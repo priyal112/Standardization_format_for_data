@@ -1,129 +1,123 @@
 import re
 import pandas as pd
-from datetime import datetime
+from rules import RULE_CATALOG
+from config import STANDARDIZATION_CONFIG
+
+# Minimum confidence required for standardization
+CONFIDENCE_THRESHOLD = (
+    STANDARDIZATION_CONFIG["confidence"]["minimum"]
+)
+
 
 def is_null(value):
-    # Check if the value is missing
-    if value is None:
-        return True
-
-    # Check pandas missing values
-    try:
-        return pd.isna(value)
-    except (TypeError, ValueError):
-        return False
+    # Check missing values
+    return value is None or pd.isna(value)
 
 
 def standardize_string(value):
     # Convert value to string
     value = str(value)
 
-    # Remove spaces from start and end
+    # Remove extra spaces
     value = value.strip()
 
-    # Replace multiple spaces with one space
+    # Replace multiple spaces with one
     value = re.sub(r"\s+", " ", value)
 
     return value
 
 
 def looks_like_email(value):
-    # Define a basic email pattern
+    # Check email pattern
     pattern = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
 
-    # Check whether value matches email pattern
     return bool(re.match(pattern, value))
 
 
 def standardize_email(value):
-    # Remove extra spaces
-    value = value.strip()
-
-    # Convert email to lowercase
-    value = value.lower()
-
-    return value
+    # Remove spaces and lowercase email
+    return value.strip().lower()
 
 
 def looks_like_boolean(value):
     # Define accepted boolean values
-    boolean_values = {
-        "true", "false",
-        "yes", "no",
-        "y", "n",
-        "1", "0"
-    }
+    true_values = {"true", "yes", "y", "1"}
+    false_values = {"false", "no", "n", "0"}
 
-    # Check whether value is a boolean-like value
-    return value.lower() in boolean_values
+    value = value.strip().lower()
+
+    return value in true_values or value in false_values
 
 
 def standardize_boolean(value):
+    # Normalize boolean value
+    value = value.strip().lower()
 
-    value = value.lower().strip()
-
-    # Map true-like values to True
     if value in {"true", "yes", "y", "1"}:
         return True
 
-    # Map false-like values to False
-    if value in {"false", "no", "n", "0"}:
-        return False
-
-    return value
+    return False
 
 
 def looks_like_integer(value):
-    # Define an integer pattern
-    pattern = r"^[+-]?\d+$"
+    # Remove surrounding spaces
+    value = value.strip()
 
     # Check integer format
-    if not re.match(pattern, value):
-        return False
-
-    # Do not convert values with leading zero
-    if len(value.lstrip("+-")) > 1 and value.lstrip("+-").startswith("0"):
-        return False
-
-    return True
+    return bool(
+        re.match(r"^[+-]?\d+$", value)
+    )
 
 
 def standardize_integer(value):
-    # Remove spaces
-    value = value.strip()
-
-    # Convert string to integer
+    # Convert value to integer
     return int(value)
 
 
 def looks_like_float(value):
-    # Define a decimal number pattern
-    pattern = r"^[+-]?\d+\.\d+$"
+    # Remove surrounding spaces
+    value = value.strip()
 
-    # Check whether value is a float
-    return bool(re.match(pattern, value))
+    cleaned = value.replace(",", "")
+
+    # Check decimal format
+    return bool(
+        re.match(
+            r"^[+-]?\d+\.\d+$",
+            cleaned
+        )
+    )
 
 
 def standardize_float(value):
-    # Remove spaces
-    value = value.strip()
-
     # Remove comma separators
     value = value.replace(",", "")
 
-    # Convert string to float
     return float(value)
 
+def looks_like_numeric(value):
+    # Remove surrounding spaces
+    value = value.strip()
+
+    cleaned = value.replace(",", "")
+
+    # Check integer or decimal
+    return bool(
+        re.match(
+            r"^[+-]?\d+(\.\d+)?$",
+            cleaned
+        )
+    )
 
 def looks_like_phone(value):
-    # Keep only digits
+    # Extract digits
     digits = re.sub(r"\D", "", value)
 
-    # Phone should contain 10 to 13 digits
+    # Check phone length
     if not 10 <= len(digits) <= 13:
         return False
 
-    # Require phone formatting or country code
+    # Require phone-like formatting
     has_phone_format = any(
         symbol in value
         for symbol in ["+", "-", " ", "(", ")"]
@@ -133,21 +127,32 @@ def looks_like_phone(value):
 
 
 def standardize_phone(value):
+    # Read phone configuration
+    phone_config = STANDARDIZATION_CONFIG["phone"]
+
+    country_code = phone_config["default_country_code"]
+    number_length = phone_config["default_number_length"]
+
     # Keep only digits
     digits = re.sub(r"\D", "", value)
 
-    # Convert Indian 91 prefix to +91
-    if len(digits) == 12 and digits.startswith("91"):
+    # Add default country code
+    if len(digits) == number_length:
+        return country_code + digits
+
+    # Remove + from configured country code
+    country_digits = country_code.replace("+", "")
+
+    # Handle existing country code
+    if digits.startswith(country_digits):
         return "+" + digits
 
-    # Add +91 for a 10-digit phone number
-    if len(digits) == 10:
-        return "+91" + digits
-
+    # Keep existing country code
     return "+" + digits
 
+
 def looks_like_date(value):
-    # Define supported date formats
+    # Supported date formats
     date_formats = [
         "%Y-%m-%d",
         "%Y/%m/%d",
@@ -157,25 +162,26 @@ def looks_like_date(value):
         "%d-%B-%Y"
     ]
 
-    # Try each supported format
     for date_format in date_formats:
         try:
-            datetime.strptime(value, date_format)
+            pd.to_datetime(
+                value,
+                format=date_format
+            )
             return True
-        except ValueError:
+        except (ValueError, TypeError):
             continue
 
     return False
 
+
 def looks_like_date_pattern(value):
-    # Check common date separators
-    return (
-        "/" in value
-        or "-" in value
-    )
+    # Check whether value looks date-like
+    return "/" in value or "-" in value
+
 
 def standardize_date(value):
-    # Define supported date formats
+    # Supported date formats
     date_formats = [
         "%Y-%m-%d",
         "%Y/%m/%d",
@@ -185,23 +191,26 @@ def standardize_date(value):
         "%d-%B-%Y"
     ]
 
-    # Try each format
     for date_format in date_formats:
         try:
-            parsed_date = datetime.strptime(value, date_format)
+            date_value = pd.to_datetime(
+                value,
+                format=date_format
+            )
 
-            # Return ISO date format
-            return parsed_date.strftime("%Y-%m-%d")
+            output_format = (
+                STANDARDIZATION_CONFIG["date"]["output_format"]
+)
+            return date_value.strftime(output_format)
 
-        except ValueError:
+        except (ValueError, TypeError):
             continue
 
-    # Return original value if conversion fails
     return value
 
 
 def standardize_value(value):
-    # Handle missing values first
+    # Handle missing value
     if is_null(value):
         return {
             "value": None,
@@ -210,82 +219,63 @@ def standardize_value(value):
             "reason": "Missing value converted to null"
         }
 
-    # Convert value to string
-    text = str(value)
+    # Clean value
+    cleaned = standardize_string(value)
 
-    # Remove unnecessary spaces
-    cleaned = standardize_string(text)
-
-    # Check email pattern
+    # Email
     if looks_like_email(cleaned):
-        new_value = standardize_email(cleaned)
+        standardized = standardize_email(cleaned)
 
         return {
-            "value": new_value,
+            "value": standardized,
             "rule": "EMAIL_STANDARDIZATION",
-            "status": "STANDARDIZED",
-            "reason": "Email converted to lowercase and trimmed"
+            "status": (
+                "STANDARDIZED"
+                if standardized != cleaned
+                else "ALREADY_STANDARD"
+            ),
+            "reason": "Email converted to lowercase and spaces removed"
         }
 
-    # Check boolean pattern
+    # Boolean
     if looks_like_boolean(cleaned):
-        new_value = standardize_boolean(cleaned)
+        standardized = standardize_boolean(cleaned)
 
         return {
-            "value": new_value,
+            "value": standardized,
             "rule": "BOOLEAN_STANDARDIZATION",
             "status": "STANDARDIZED",
             "reason": "Boolean value normalized"
         }
 
-    # Check clearly formatted phone
+    # Phone
     if looks_like_phone(cleaned):
-        new_value = standardize_phone(cleaned)
+        standardized = standardize_phone(cleaned)
 
         return {
-            "value": new_value,
+            "value": standardized,
             "rule": "PHONE_STANDARDIZATION",
             "status": "STANDARDIZED",
-            "reason": "Phone formatting normalized"
+            "reason": "Phone number normalized"
         }
 
-    # Check integer
-    if looks_like_integer(cleaned):
-        new_value = standardize_integer(cleaned)
-
-        return {
-            "value": new_value,
-            "rule": "INTEGER_STANDARDIZATION",
-            "status": "STANDARDIZED",
-            "reason": "Numeric value converted to integer"
-        }
-
-    # Check date pattern
+    # Date
     if looks_like_date(cleaned):
-        new_value = standardize_date(cleaned)
+        standardized = standardize_date(cleaned)
 
         return {
-            "value": new_value,
+            "value": standardized,
             "rule": "DATE_STANDARDIZATION",
-            "status": "STANDARDIZED",
-            "reason": "Date converted to YYYY-MM-DD format"
+            "status": (
+                "STANDARDIZED"
+                if standardized != cleaned
+                else "ALREADY_STANDARD"
+            ),
+            "reason": "Date converted to YYYY-MM-DD"
         }
 
-        # Check if value looks like a date
+    # Invalid date-like value
     if looks_like_date_pattern(cleaned):
-
-        # Check if it is a valid date
-        if looks_like_date(cleaned):
-            new_value = standardize_date(cleaned)
-
-            return {
-                "value": new_value,
-                "rule": "DATE_STANDARDIZATION",
-                "status": "STANDARDIZED",
-                "reason": "Date converted to YYYY-MM-DD format"
-            }
-
-        # Do not guess invalid dates
         return {
             "value": cleaned,
             "rule": "INVALID_DATE",
@@ -293,41 +283,284 @@ def standardize_value(value):
             "reason": "Value looks like a date but is not valid"
         }
 
-    # Check float
-    if looks_like_float(cleaned):
-        new_value = standardize_float(cleaned)
+    # Integer
+    if looks_like_integer(cleaned):
+
+        numeric_part = cleaned.lstrip("+-")
+
+        # Avoid changing IDs with leading zeros
+        if (
+            len(numeric_part) > 1
+            and numeric_part.startswith("0")
+        ):
+            return {
+                "value": cleaned,
+                "rule": "INTEGER_REVIEW",
+                "status": "NEEDS_REVIEW",
+                "reason": "Leading zeros may represent an ID or code"
+            }
 
         return {
-            "value": new_value,
-            "rule": "FLOAT_STANDARDIZATION",
+            "value": standardize_integer(cleaned),
+            "rule": "INTEGER_STANDARDIZATION",
             "status": "STANDARDIZED",
-            "reason": "Numeric value converted to float"
+            "reason": "Numeric value converted to integer"
         }
 
-    # Check ambiguous 10-digit number
-    digits = re.sub(r"\D", "", cleaned)
+    # Float
+    if looks_like_float(cleaned):
+        return {
+            "value": standardize_float(cleaned),
+            "rule": "FLOAT_STANDARDIZATION",
+            "status": "STANDARDIZED",
+            "reason": "Decimal value converted to float"
+        }
 
-    if len(digits) == 10 and digits.isdigit():
+    # Possible phone or numeric identifier
+    if cleaned.isdigit() and len(cleaned) == 10:
         return {
             "value": cleaned,
-            "rule": "AMBIGUOUS_NUMERIC_VALUE",
+            "rule": "NUMERIC_REVIEW",
             "status": "NEEDS_REVIEW",
             "reason": "Could be a phone number or another numeric value"
         }
 
-    # Check generic string changes
-    if cleaned != text:
-        return {
-            "value": cleaned,
-            "rule": "STRING_STANDARDIZATION",
-            "status": "STANDARDIZED",
-            "reason": "Extra spaces removed"
-        }
-
-    # No change required
+    # Generic string
     return {
         "value": cleaned,
-        "rule": "NO_CHANGE",
-        "status": "ALREADY_STANDARD",
-        "reason": "No standardization required"
+        "rule": "STRING_STANDARDIZATION",
+        "status": (
+            "STANDARDIZED"
+            if cleaned != str(value)
+            else "ALREADY_STANDARD"
+        ),
+        "reason": "Extra spaces removed"
     }
+
+
+def detect_value_type(value):
+    # Handle missing values
+    if is_null(value):
+        return "NULL"
+
+    # Clean value
+    cleaned = standardize_string(value)
+
+    # Detect email
+    if looks_like_email(cleaned):
+        return "EMAIL"
+
+    # Detect boolean
+    if looks_like_boolean(cleaned):
+        return "BOOLEAN"
+
+    # Detect phone
+    if looks_like_phone(cleaned):
+        return "PHONE"
+
+    # Detect date
+    if looks_like_date(cleaned):
+        return "DATE"
+
+    # Detect float
+    if looks_like_float(cleaned):
+        return "FLOAT"
+
+    # Detect integer
+    if looks_like_integer(cleaned):
+        return "INTEGER"
+
+    # Default type
+    return "STRING"
+
+
+def profile_column(values):
+    # Store detected types
+    detected_types = []
+
+    # Check every value
+    for value in values:
+
+        value_type = detect_value_type(value)
+
+        # Ignore null values
+        if value_type != "NULL":
+            detected_types.append(value_type)
+
+    # Handle empty column
+    if not detected_types:
+        return {
+            "detected_type": "UNKNOWN",
+            "confidence": 0,
+            "distribution": {}
+        }
+
+    # Count each detected type
+    type_counts = pd.Series(
+        detected_types
+    ).value_counts()
+
+    # Get dominant type
+    dominant_type = type_counts.index[0]
+
+    # Calculate confidence
+    confidence = (
+        type_counts.iloc[0]
+        / len(detected_types)
+    ) * 100
+
+    # Convert distribution to dictionary
+    distribution = {
+        data_type: int(count)
+        for data_type, count
+        in type_counts.items()
+    }
+
+    return {
+        "detected_type": dominant_type,
+        "confidence": round(confidence, 2),
+        "distribution": distribution
+    }
+
+
+def standardize_value_by_type(
+    value,
+    detected_type
+):
+    # Handle missing value
+    if is_null(value):
+        return {
+            "value": None,
+            "rule": "NULL_STANDARDIZATION",
+            "status": "STANDARDIZED",
+            "reason": "Missing value converted to null"
+        }
+
+    # Clean value
+    cleaned = standardize_string(value)
+
+    # Email rule
+    if detected_type == "EMAIL":
+
+        if looks_like_email(cleaned):
+
+            standardized = standardize_email(cleaned)
+
+            return {
+                "value": standardized,
+                "rule": "EMAIL_STANDARDIZATION",
+                "status": (
+                    "STANDARDIZED"
+                    if standardized != cleaned
+                    else "ALREADY_STANDARD"
+                ),
+                "reason": (
+                    "Email converted to lowercase "
+                    "and spaces removed"
+                )
+            }
+
+    # Boolean rule
+    if detected_type == "BOOLEAN":
+
+        if looks_like_boolean(cleaned):
+
+            standardized = standardize_boolean(cleaned)
+
+            return {
+                "value": standardized,
+                "rule": "BOOLEAN_STANDARDIZATION",
+                "status": "STANDARDIZED",
+                "reason": "Boolean value normalized"
+            }
+
+    # Phone rule
+    if detected_type == "PHONE":
+
+        if looks_like_phone(cleaned):
+
+            standardized = standardize_phone(cleaned)
+
+            return {
+                "value": standardized,
+                "rule": "PHONE_STANDARDIZATION",
+                "status": "STANDARDIZED",
+                "reason": "Phone number normalized"
+            }
+
+    # Date rule
+    if detected_type == "DATE":
+
+        if looks_like_date(cleaned):
+
+            standardized = standardize_date(cleaned)
+
+            return {
+                "value": standardized,
+                "rule": "DATE_STANDARDIZATION",
+                "status": (
+                    "STANDARDIZED"
+                    if standardized != cleaned
+                    else "ALREADY_STANDARD"
+                ),
+                "reason": "Date converted to YYYY-MM-DD"
+            }
+
+    # Integer rule
+    if detected_type == "INTEGER":
+
+        if looks_like_integer(cleaned):
+
+            numeric_part = cleaned.lstrip("+-")
+
+            # Protect possible IDs
+            if (
+                len(numeric_part) > 1
+                and numeric_part.startswith("0")
+            ):
+                return {
+                    "value": cleaned,
+                    "rule": "INTEGER_REVIEW",
+                    "status": "NEEDS_REVIEW",
+                    "reason": (
+                        "Leading zeros may represent "
+                        "an ID or code"
+                    )
+                }
+
+            return {
+                "value": standardize_integer(cleaned),
+                "rule": "INTEGER_STANDARDIZATION",
+                "status": "STANDARDIZED",
+                "reason": "Numeric value converted to integer"
+            }
+
+    # Float rule
+    if detected_type == "FLOAT":
+
+        if looks_like_float(cleaned):
+
+            standardized = standardize_float(cleaned)
+
+            return {
+                "value": standardized,
+                "rule": "FLOAT_STANDARDIZATION",
+                "status": "STANDARDIZED",
+                "reason": "Decimal value converted to float"
+            }
+
+    return standardize_value(value)
+
+def classify_result(result):
+    # Get rule name
+    rule = result["rule"]
+
+    # Find rule configuration
+    rule_config = RULE_CATALOG.get(rule)
+
+    # Return configured category
+    if rule_config:
+        return rule_config["category"]
+
+    # Unknown rule
+    return "UNKNOWN"
