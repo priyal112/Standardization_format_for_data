@@ -1,0 +1,18 @@
+{
+  "total_values": 60,
+  "standardized": 44,
+  "already_standard": 6,
+  "needs_review": 10,
+  "invalid": 0,
+  "normal_standardization": 50,
+  "genuine_data_review": 10,
+  "genuine_data_issue": 0,
+  "rules_applied": {
+    "INTEGER_STANDARDIZATION": 12,
+    "STRING_STANDARDIZATION": 10,
+    "EMAIL_STANDARDIZATION": 10,
+    "LOW_CONFIDENCE_REVIEW": 10,
+    "BOOLEAN_STANDARDIZATION": 10,
+    "FLOAT_STANDARDIZATION": 8
+  }
+}

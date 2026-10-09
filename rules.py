@@ -72,5 +72,19 @@ RULE_CATALOG = {
         "category": "GENUINE_DATA_ISSUE",
         "description": "Value looks like a date but is invalid",
         "automatic": False
+    },
+
+
+    "AMBIGUOUS_DATE_REVIEW": {
+        "category": "GENUINE_DATA_REVIEW",
+        "description": "Date has multiple valid interpretations",
+        "automatic": False
+    },
+
+    "PHONE_REVIEW": {
+        "category": "GENUINE_DATA_REVIEW",
+        "description": "Phone number has an unexpected length or format",
+        "auto": False
     }
+
 }

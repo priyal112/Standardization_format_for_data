@@ -1,0 +1,16 @@
+{
+  "total_values": 4,
+  "standardized": 4,
+  "already_standard": 0,
+  "needs_review": 0,
+  "invalid": 0,
+  "normal_standardization": 4,
+  "genuine_data_review": 0,
+  "genuine_data_issue": 0,
+  "rules_applied": {
+    "STRING_STANDARDIZATION": 1,
+    "EMAIL_STANDARDIZATION": 1,
+    "BOOLEAN_STANDARDIZATION": 1,
+    "FLOAT_STANDARDIZATION": 1
+  }
+}

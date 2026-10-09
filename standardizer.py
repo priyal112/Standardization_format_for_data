@@ -109,46 +109,54 @@ def looks_like_numeric(value):
         )
     )
 
-def looks_like_phone(value):
-    # Extract digits
-    digits = re.sub(r"\D", "", value)
 
-    # Check phone length
-    if not 10 <= len(digits) <= 13:
+def looks_like_phone(value):
+    # Reject missing values
+    if pd.isna(value):
         return False
 
-    # Require phone-like formatting
-    has_phone_format = any(
-        symbol in value
-        for symbol in ["+", "-", " ", "(", ")"]
-    )
+    value = str(value).strip()
 
-    return has_phone_format
+    # Extract digits only for length validation
+    digits = re.sub(r"\D", "", value)
+
+    # Accept 10-digit Indian numbers or 12 digits starting with 91
+    if len(digits) == 10:
+        return True
+
+    if len(digits) == 12 and digits.startswith("91"):
+        return True
+
+    return False
+
 
 
 def standardize_phone(value):
+
+    if pd.isna(value):
+        return value
+
     # Read phone configuration
     phone_config = STANDARDIZATION_CONFIG["phone"]
-
     country_code = phone_config["default_country_code"]
     number_length = phone_config["default_number_length"]
 
-    # Keep only digits
-    digits = re.sub(r"\D", "", value)
+    # Extract digits only
+    digits = re.sub(r"\D", "", str(value))
 
-    # Add default country code
+    # Normalize local phone numbers
     if len(digits) == number_length:
         return country_code + digits
 
-    # Remove + from configured country code
+    # Normalize numbers with the configured country code
     country_digits = country_code.replace("+", "")
 
-    # Handle existing country code
-    if digits.startswith(country_digits):
-        return "+" + digits
+    if len(digits) == number_length + len(country_digits):
+        if digits.startswith(country_digits):
+            return "+" + digits
 
-    # Keep existing country code
-    return "+" + digits
+    # Keep unexpected numbers unchanged
+    return value
 
 
 def looks_like_date(value):
@@ -181,33 +189,35 @@ def looks_like_date_pattern(value):
 
 
 def standardize_date(value):
-    # Supported date formats
-    date_formats = [
-        "%Y-%m-%d",
-        "%Y/%m/%d",
-        "%d-%m-%Y",
-        "%d/%m/%Y",
-        "%d-%b-%Y",
-        "%d-%B-%Y"
-    ]
+    # Handle missing values
+    if pd.isna(value):
+        return value
 
+    # Read date formats from configuration
+    date_config = STANDARDIZATION_CONFIG["date"]
+    date_formats = date_config["input_formats"]
+    output_format = date_config["output_format"]
+
+    # Convert the value to a string
+    value = str(value).strip()
+
+    # Check each configured input format
     for date_format in date_formats:
         try:
             date_value = pd.to_datetime(
                 value,
-                format=date_format
+                format=date_format,
+                errors="raise"
             )
 
-            output_format = (
-                STANDARDIZATION_CONFIG["date"]["output_format"]
-)
+            # Return the standardized date
             return date_value.strftime(output_format)
 
         except (ValueError, TypeError):
             continue
 
+    # Keep unrecognized values unchanged
     return value
-
 
 def standardize_value(value):
     # Handle missing value
@@ -476,6 +486,7 @@ def standardize_value_by_type(
 
     # Phone rule
     if detected_type == "PHONE":
+        digits = re.sub(r"\D", "", str(cleaned))
 
         if looks_like_phone(cleaned):
 
@@ -484,27 +495,73 @@ def standardize_value_by_type(
             return {
                 "value": standardized,
                 "rule": "PHONE_STANDARDIZATION",
-                "status": "STANDARDIZED",
+                "status": (
+                    "ALREADY_STANDARD"
+                    if str(cleaned) == standardized
+                    else "STANDARDIZED"
+                ),
                 "reason": "Phone number normalized"
             }
+        
+        # Flag suspicious phone numbers for review
+        return {
+            "value": cleaned,
+            "rule": "PHONE_REVIEW",
+            "status": "NEEDS_REVIEW",
+            "reason": "Phone number has an unexpected length or format"
+        }
+
 
     # Date rule
     if detected_type == "DATE":
-
         if looks_like_date(cleaned):
 
+            date_config = STANDARDIZATION_CONFIG["date"] 
+            date_formats = date_config["input_formats"]
+
+            ambiguous_formats = [ "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%m-%d-%Y" ]
+
+            matching_formats = []
+
+            for date_format in ambiguous_formats: 
+                try: 
+                    pd.to_datetime( 
+                        cleaned, format=date_format, errors="raise" 
+                        ) 
+                    matching_formats.append(date_format) 
+                    
+                except (ValueError, TypeError): 
+                    continue
+
+            # Review when both day-first and month-first are valid 
+            has_day_first = any( 
+            fmt.startswith("%d") for fmt in matching_formats 
+            ) 
+            has_month_first = any( 
+                fmt.startswith("%m") for fmt in matching_formats 
+            )
+
+            if has_day_first and has_month_first: 
+                return { 
+                "value": cleaned, 
+                "rule": "AMBIGUOUS_DATE_REVIEW", "status": "NEEDS_REVIEW", 
+                "reason": ( "Date can have multiple valid interpretations" 
+                    ) 
+                }
+            
             standardized = standardize_date(cleaned)
 
-            return {
-                "value": standardized,
-                "rule": "DATE_STANDARDIZATION",
-                "status": (
-                    "STANDARDIZED"
-                    if standardized != cleaned
-                    else "ALREADY_STANDARD"
-                ),
-                "reason": "Date converted to YYYY-MM-DD"
+            return { 
+                "value": standardized, 
+                "rule": "DATE_STANDARDIZATION", 
+                "status": ( 
+                    "STANDARDIZED" 
+                    if standardized != cleaned 
+                    else "ALREADY_STANDARD" 
+                ), 
+                "reason": "Date converted to configured output format" 
             }
+
 
     # Integer rule
     if detected_type == "INTEGER":

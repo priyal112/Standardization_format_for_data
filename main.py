@@ -1,9 +1,10 @@
 from pathlib import Path
 import shutil
-
+import json
+import uuid
 import pandas as pd
 from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import FileResponse
+from datetime import datetime
 
 from standardizer import (
     profile_column, standardize_value_by_type, classify_result, CONFIDENCE_THRESHOLD
@@ -22,6 +23,19 @@ OUTPUT_FOLDER = Path("output")
 # Create folders if they do not exist
 INPUT_FOLDER.mkdir(exist_ok=True)
 OUTPUT_FOLDER.mkdir(exist_ok=True)
+
+def create_upload_folder():
+    # Generate a unique upload ID
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    unique_id = uuid.uuid4().hex[:6]
+
+    upload_id = f"upload_{timestamp}_{unique_id}"
+
+    # Create a separate output folder
+    upload_folder = OUTPUT_FOLDER / upload_id
+    upload_folder.mkdir(parents=True, exist_ok=False)
+
+    return upload_id, upload_folder
 
 
 def read_file(file_path):
@@ -138,45 +152,54 @@ def standardize_data(data):
     return data, logs, profiles
 
 
-def save_output(data, logs, input_file):
-    # Get original file extension
-    extension = input_file.suffix.lower()
+def save_output(data, logs, input_file, upload_folder):
+    # Preserve the input file format
+    extension = Path(input_file).suffix.lower()
 
-    # Get original file name
-    file_name = input_file.stem
-
-    # Create output file name
-    output_name = f"{file_name}_standardized"
-
-    # Save CSV
     if extension == ".csv":
-        output_file = OUTPUT_FOLDER / f"{output_name}.csv"
+        output_file = upload_folder / "standardized.csv"
         data.to_csv(output_file, index=False)
 
-    # Save Excel
-    elif extension in [".xlsx", ".xls"]:
-        output_file = OUTPUT_FOLDER / f"{output_name}.xlsx"
+    elif extension in {".xlsx", ".xls"}:
+        output_file = upload_folder / "standardized.xlsx"
         data.to_excel(output_file, index=False)
 
-    # Save JSON
     elif extension == ".json":
-        output_file = OUTPUT_FOLDER / f"{output_name}.json"
+        output_file = upload_folder / "standardized.json"
         data.to_json(
             output_file,
             orient="records",
-            indent=4
+            indent=2
         )
 
-    # Create standardization log
-    log_file = OUTPUT_FOLDER / "standardization_log.csv"
+    else:
+        raise HTTPException(
+            status_code=415,
+            detail="Unsupported file type"
+        )
 
-    log_data = pd.DataFrame(logs)
-    log_data.to_csv(log_file, index=False)
+    # Save the detailed processing log
+    log_file = upload_folder / "standardization_log.csv"
+    pd.DataFrame(logs).to_csv(log_file, index=False)
 
-    return output_file, log_file
+    return str(output_file), str(log_file)
 
 
 def create_summary(logs):
+
+    if not logs:
+        return {
+            "total_values": 0,
+            "standardized": 0,
+            "already_standard": 0,
+            "needs_review": 0,
+            "invalid": 0,
+            "normal_standardization": 0,
+            "genuine_data_review": 0,
+            "genuine_data_issue": 0,
+            "rules_applied": {}
+        }
+    
     # Convert logs to DataFrame
     log_data = pd.DataFrame(logs)
 
@@ -260,7 +283,12 @@ async def standardize_file(
     safe_filename = Path(file.filename).name
 
     # Create uploaded file path
-    input_file = INPUT_FOLDER / safe_filename
+    upload_id = uuid.uuid4().hex[:8]
+    original_name = Path(safe_filename).stem
+    extension = Path(safe_filename).suffix.lower()
+
+    unique_filename = f"{original_name}_{upload_id}{extension}"
+    input_file = INPUT_FOLDER / unique_filename
 
     # Save uploaded file
     with input_file.open("wb") as buffer:
@@ -286,22 +314,30 @@ async def standardize_file(
     # Standardize the data
     standardized_data, logs, profiles = standardize_data(data)
 
+    # Create a unique output folder 
+    upload_id, upload_folder = create_upload_folder()
+
     # Create summary
     summary = create_summary(logs)
 
     # Save standardized output
-    output_file, log_file = save_output(
-        standardized_data,
-        logs,
-        input_file
+    output_file, log_file = save_output( 
+        data, logs, safe_filename, upload_folder 
     )
+
+    # Save summary as JSON 
+    summary_file = upload_folder / "summary.json" 
+    with open(summary_file, "w", encoding="utf-8") as file: 
+        json.dump(summary, file, indent=2)
 
     # Return summary
     return {
         "message": "File standardized successfully",
+        "upload_id": upload_id,
         "input_file": safe_filename,
         "output_file": str(output_file),
         "log_file": str(log_file),
+        "summary_file": str(summary_file),
         "rows_processed": len(data),
         "columns_processed": len(data.columns),
         "column_profiles": profiles,
