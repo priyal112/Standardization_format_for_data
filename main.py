@@ -6,6 +6,7 @@ import pandas as pd
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from datetime import datetime
 
+from config import STANDARDIZATION_CONFIG
 from standardizer import (
     profile_column, standardize_value_by_type, classify_result, CONFIDENCE_THRESHOLD
 )
@@ -75,6 +76,7 @@ def read_file(file_path):
 def standardize_data(data):
     # Store standardization logs
     logs = []
+    data = data.copy().astype(object)
 
     # Store column profiles
     profiles = {}
@@ -113,7 +115,7 @@ def standardize_data(data):
 
             # Apply type-based rule only
             # when confidence is high enough
-            if confidence >= CONFIDENCE_THRESHOLD:
+            if confidence >= STANDARDIZATION_CONFIG["confidence"]["minimum"]:
 
                 result = standardize_value_by_type(
                     original_value,
@@ -212,8 +214,24 @@ def create_summary(logs):
     # Count rules
     rule_counts = log_data["rule"].value_counts()
 
+    # Calculate total values
+    total_values = len(log_data)
+
+    # Calculate processing percentages
+    standardized_percentage = round(
+        status_counts.get("STANDARDIZED", 0) / total_values * 100, 2
+    )
+
+    already_standard_percentage = round(
+        status_counts.get("ALREADY_STANDARD", 0) / total_values * 100, 2
+    )
+
+    needs_review_percentage = round(
+        status_counts.get("NEEDS_REVIEW", 0) / total_values * 100, 2
+    )
+
     return {
-        "total_values": len(log_data),
+        "total_values": total_values,
 
         "standardized": int(
             status_counts.get("STANDARDIZED", 0)
@@ -256,7 +274,11 @@ def create_summary(logs):
             rule: int(count)
             for rule, count
             in rule_counts.items()
-        }
+        },
+
+        "standardized_percentage": standardized_percentage,
+        "already_standard_percentage": already_standard_percentage,
+        "needs_review_percentage": needs_review_percentage
     }
 
 

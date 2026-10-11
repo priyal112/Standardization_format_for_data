@@ -428,8 +428,11 @@ def profile_column(values):
 
     return {
         "detected_type": dominant_type,
-        "confidence": round(confidence, 2),
-        "distribution": distribution
+        "confidence": float(round(confidence, 2)),
+        "distribution": distribution,
+        "needs_review": bool(
+            confidence < STANDARDIZATION_CONFIG["confidence"]["minimum"]
+        )
     }
 
 
