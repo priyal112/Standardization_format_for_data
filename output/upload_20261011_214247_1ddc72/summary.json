@@ -1,0 +1,20 @@
+{
+  "total_values": 5,
+  "standardized": 4,
+  "already_standard": 1,
+  "needs_review": 0,
+  "invalid": 0,
+  "normal_standardization": 5,
+  "genuine_data_review": 0,
+  "genuine_data_issue": 0,
+  "rules_applied": {
+    "STRING_STANDARDIZATION": 1,
+    "EMAIL_STANDARDIZATION": 1,
+    "BOOLEAN_STANDARDIZATION": 1,
+    "FLOAT_STANDARDIZATION": 1,
+    "INTEGER_STANDARDIZATION": 1
+  },
+  "standardized_percentage": 80.0,
+  "already_standard_percentage": 20.0,
+  "needs_review_percentage": 0.0
+}

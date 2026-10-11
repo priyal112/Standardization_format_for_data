@@ -1,3 +1,7 @@
+from cmath import e
+from os import name
+from unittest import result
+import traceback
 from main import create_summary
 from io import BytesIO
 from pathlib import Path
@@ -20,16 +24,13 @@ def test_api_is_running():
 
 
 def test_upload_and_standardize_csv():
-    # Prepare sample CSV content
+    
+    # Prepare sample CSV with an invalid phone number
+    # Prepare sample CSV with phone number variations
     csv_content = (
-        b"name,email,active,amount\n"
-        b" Priyal ,PRIYAL@GMAIL.COM,YES,1,250.50\n"
-    )
-
-    # Use a simpler valid CSV row
-    csv_content = (
-        b"name,email,active,amount\n"
-        b" Priyal ,PRIYAL@GMAIL.COM,YES,1250.50\n"
+        b"name,email,active,amount,phone\n"
+        b"Priyal,priyal@gmail.com,YES,1250.50,9876543210\n"
+        b"Rahul,rahul@gmail.com,YES,1500.00,12345\n"
     )
 
     response = client.post(
@@ -47,9 +48,23 @@ def test_upload_and_standardize_csv():
 
     result = response.json()
 
-    assert result["rows_processed"] == 1
-    assert result["columns_processed"] == 4
-    assert result["summary"]["total_values"] == 4
+    assert result["rows_processed"] == 2
+    assert result["columns_processed"] == 5
+    assert result["summary"]["total_values"] == 10
+
+    # Check review records in API response
+    assert "review_records" in result
+    assert "review_records_count" in result
+    print("Review count:", result["review_records_count"])
+    print("Review records:", result["review_records"])
+    print("Column profiles:", result["column_profiles"])
+    assert result["review_records_count"] >= 1
+
+    assert any(
+        record["column"] == "phone"
+        and record["rule"] == "PHONE_REVIEW"
+        for record in result["review_records"]
+    )
 
     # Check output file exists
     output_path = Path(result["output_file"])
@@ -97,6 +112,8 @@ if __name__ == "__main__":
     print(f"\nTotal: {passed + failed}")
     print(f"Passed: {passed}")
     print(f"Failed: {failed}") 
+    traceback.print_exc()
+    print(f"FAIL: {name}: {e}")
 
 def test_create_summary():
     logs = [

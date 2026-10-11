@@ -1,0 +1,5 @@
+row,column,detected_type,confidence,original_value,standardized_value,rule,status,category,reason
+1,name,STRING,100.0, Priyal ,Priyal,STRING_STANDARDIZATION,STANDARDIZED,NORMAL_STANDARDIZATION,Extra spaces removed
+1,email,EMAIL,100.0,PRIYAL@GMAIL.COM,priyal@gmail.com,EMAIL_STANDARDIZATION,STANDARDIZED,NORMAL_STANDARDIZATION,Email converted to lowercase and spaces removed
+1,active,BOOLEAN,100.0,YES,True,BOOLEAN_STANDARDIZATION,STANDARDIZED,NORMAL_STANDARDIZATION,Boolean value normalized
+1,amount,FLOAT,100.0,1250.50,1250.5,FLOAT_STANDARDIZATION,STANDARDIZED,NORMAL_STANDARDIZATION,Decimal value converted to float

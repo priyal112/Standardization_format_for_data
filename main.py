@@ -218,17 +218,17 @@ def create_summary(logs):
     total_values = len(log_data)
 
     # Calculate processing percentages
-    standardized_percentage = round(
-        status_counts.get("STANDARDIZED", 0) / total_values * 100, 2
-    )
+    standardized_percentage = float(round(
+    status_counts.get("STANDARDIZED", 0) / total_values * 100, 2
+    ))
 
-    already_standard_percentage = round(
+    already_standard_percentage = float(round(
         status_counts.get("ALREADY_STANDARD", 0) / total_values * 100, 2
-    )
+    ))
 
-    needs_review_percentage = round(
+    needs_review_percentage = float(round(
         status_counts.get("NEEDS_REVIEW", 0) / total_values * 100, 2
-    )
+    ))
 
     return {
         "total_values": total_values,
@@ -281,6 +281,27 @@ def create_summary(logs):
         "needs_review_percentage": needs_review_percentage
     }
 
+
+def get_review_records(logs):
+    # Keep records that need manual review
+    review_records = [
+        log for log in logs
+        if log.get("status") == "NEEDS_REVIEW"
+    ]
+
+    # Return only useful review details
+    return [
+        {
+            "row": log.get("row"),
+            "column": log.get("column"),
+            "original_value": log.get("original_value"),
+            "detected_type": log.get("detected_type"),
+            "confidence": log.get("confidence"),
+            "rule": log.get("rule"),
+            "reason": log.get("reason")
+        }
+        for log in review_records
+    ]
 
 @app.get("/")
 def home():
@@ -342,15 +363,24 @@ async def standardize_file(
     # Create summary
     summary = create_summary(logs)
 
+    # Get records that need manual review
+    review_records = get_review_records(logs)
+
     # Save standardized output
     output_file, log_file = save_output( 
-        data, logs, safe_filename, upload_folder 
+        standardized_data, logs, safe_filename, upload_folder 
     )
 
     # Save summary as JSON 
     summary_file = upload_folder / "summary.json" 
     with open(summary_file, "w", encoding="utf-8") as file: 
         json.dump(summary, file, indent=2)
+
+    # Save review records as JSON
+    review_file = upload_folder / "review_records.json"
+
+    with open(review_file, "w", encoding="utf-8") as file:
+        json.dump(review_records, file, indent=2)
 
     # Return summary
     return {
@@ -363,5 +393,7 @@ async def standardize_file(
         "rows_processed": len(data),
         "columns_processed": len(data.columns),
         "column_profiles": profiles,
-        "summary": summary
+        "summary": summary,
+        "review_records_count": len(review_records),
+        "review_records": review_records
     }
