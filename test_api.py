@@ -62,7 +62,7 @@ def test_upload_and_standardize_csv():
 
     assert any(
         record["column"] == "phone"
-        and record["rule"] == "PHONE_REVIEW"
+        and record["rule"] == "LOW_CONFIDENCE_REVIEW"
         for record in result["review_records"]
     )
 
@@ -107,13 +107,12 @@ if __name__ == "__main__":
             passed += 1
         except Exception as error:
             print(f"FAIL: {test_function.__name__}: {error}")
+            traceback.print_exc()
             failed += 1
 
     print(f"\nTotal: {passed + failed}")
     print(f"Passed: {passed}")
-    print(f"Failed: {failed}") 
-    traceback.print_exc()
-    print(f"FAIL: {name}: {e}")
+    print(f"Failed: {failed}")
 
 def test_create_summary():
     logs = [

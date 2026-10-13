@@ -1,0 +1,11 @@
+[
+  {
+    "row": 2,
+    "column": "Phone",
+    "original_value": "09876543211",
+    "detected_type": "PHONE",
+    "confidence": 90.0,
+    "rule": "PHONE_REVIEW",
+    "reason": "Phone number has an unexpected length or format"
+  }
+]

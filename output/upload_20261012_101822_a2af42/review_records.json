@@ -1,0 +1,20 @@
+[
+  {
+    "row": 1,
+    "column": "phone",
+    "original_value": "9876543210",
+    "detected_type": "PHONE",
+    "confidence": 50.0,
+    "rule": "LOW_CONFIDENCE_REVIEW",
+    "reason": "Column type confidence is only 50.0%"
+  },
+  {
+    "row": 2,
+    "column": "phone",
+    "original_value": "12345",
+    "detected_type": "PHONE",
+    "confidence": 50.0,
+    "rule": "LOW_CONFIDENCE_REVIEW",
+    "reason": "Column type confidence is only 50.0%"
+  }
+]
